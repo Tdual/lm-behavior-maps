@@ -1,0 +1,9 @@
+{
+  "agents": [
+    {"name": "window-4",  "model": "HuggingFaceTB/SmolLM2-135M-Instruct", "window": 4},
+    {"name": "window-2",  "model": "HuggingFaceTB/SmolLM2-135M-Instruct", "window": 2},
+    {"name": "window-1",  "model": "HuggingFaceTB/SmolLM2-135M-Instruct", "window": 1},
+    {"name": "no-system", "model": "HuggingFaceTB/SmolLM2-135M-Instruct", "window": 4, "system": false},
+    {"name": "hot",       "model": "HuggingFaceTB/SmolLM2-135M-Instruct", "window": 4, "temperature": 1.25}
+  ]
+}
