@@ -65,6 +65,11 @@ def score_references(
     fp = agent.scorer.fingerprint
     system = agent.system
 
+    if hasattr(agent.scorer, "policy"):
+        return _score_by_policy(
+            agent, references, bodies, actions, action_index, trajectory_id, cache, progress
+        )
+
     wanted: list[tuple[str, str]] = []
     slots: list[tuple[int, int]] = []
     scores: list[np.ndarray] = [np.empty(len(a), dtype=np.float64) for a in actions]
@@ -106,6 +111,64 @@ def score_references(
             "harness": type(agent.harness).__name__,
             "system": system,
             "generator": references.generator,
+        },
+    )
+
+
+def _score_by_policy(
+    agent, references, bodies, actions, action_index, trajectory_id, cache, progress
+) -> PolicyVectors:
+    """Backends that hand back a whole distribution: one call per step.
+
+    The cache still stores one value per (body, action), so a policy-based and
+    a teacher-forced run of the same agent do not share entries -- they are
+    different quantities and the fingerprints differ accordingly.
+    """
+    fp, system = agent.scorer.fingerprint, agent.system
+    policies: list[np.ndarray] = []
+    fetched = 0
+
+    for body, acts in zip(bodies, actions, strict=True):
+        cached = [cache.get(fp, system, body, a) if cache else None for a in acts]
+        if all(c is not None for c in cached):
+            p = np.asarray(cached, dtype=np.float64)
+        else:
+            fetched += 1
+            p = np.asarray(agent.scorer.policy(body, acts, system=system), dtype=np.float64)
+            if p.shape != (len(acts),):
+                raise RuntimeError(f"policy() returned shape {p.shape} for {len(acts)} actions")
+            if np.any(p < 0):
+                raise RuntimeError("policy() returned a negative probability")
+            if cache:
+                cache.put_many(
+                    fp, system, [(body, a, v) for a, v in zip(acts, p, strict=True)]
+                )
+        total = float(p.sum())
+        if total <= 0:
+            raise RuntimeError("policy() returned an all-zero distribution")
+        p = p / total
+        if agent.temperature != 1.0:
+            p = p ** (1.0 / agent.temperature)
+            p = p / p.sum()
+        policies.append(p)
+
+    if progress:
+        print(f"[{agent.name}] fetched {fetched} of {len(bodies)} steps, rest from cache")
+
+    return PolicyVectors(
+        name=agent.name,
+        policies=policies,
+        raw=[np.log(p + 1e-300) for p in policies],
+        action_index=action_index,
+        trajectory_id=np.asarray(trajectory_id, dtype=np.int64),
+        mean_length=references.mean_length,
+        meta={
+            "scorer": fp,
+            "temperature": agent.temperature,
+            "harness": type(agent.harness).__name__,
+            "system": system,
+            "generator": references.generator,
+            "unnormalised_coordinate": False,
         },
     )
 

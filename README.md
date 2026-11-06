@@ -126,21 +126,54 @@ package carries both conventions so the choice is measured, not assumed.
 
 ## Backends
 
-The one primitive is `loglikelihood([(body, action)]) -> [log p]`, deliberately
-the shape of `lm_eval.api.model.LM.loglikelihood`.
+Two primitives, because hosted endpoints can serve one of them but not the other.
 
-| Backend | Status |
-|---|---|
-| `HFScorer` — local weights via `transformers` | shipped |
-| `LMEvalScorer` — wraps any lm-evaluation-harness model (HF, vLLM, compatible servers) | shipped |
-| `FunctionScorer` — any callable | shipped |
+**`loglikelihood([(body, action)]) -> [log p]`** — teacher forcing. Deliberately
+the shape of `lm_eval.api.model.LM.loglikelihood`. The agent stays the agent:
+nothing about the task is reformatted.
 
-**Hosted chat APIs generally cannot do this.** Teacher forcing needs the
-log-probability of an action *you supply*. OpenAI's `echo` is gone from the
-chat endpoint, and Anthropic exposes no log-probabilities. What works is local
-weights, vLLM (`prompt_logprobs`), and self-hosted OpenAI-compatible servers.
-Top-k truncation is not a problem: keeping only the top 50 logprobs reproduced
-the full-vocabulary distances at Spearman 1.0000.
+**`policy(body, actions) -> distribution`** — read the whole policy at once. No
+teacher forcing, one call per step instead of one per action.
+
+| Backend | Primitive | Runs on |
+|---|---|---|
+| `HFScorer` | teacher forcing | local weights via `transformers` |
+| `LMEvalScorer` | teacher forcing | any lm-evaluation-harness model (HF, vLLM, …) |
+| `EchoScorer` | teacher forcing | `/v1/completions` with `echo=true` — vLLM's server, providers that kept the endpoint |
+| `ChoiceScorer` | policy | **any chat API with `top_logprobs`** — OpenAI, Azure, Gemini/Vertex, Together, Fireworks, OpenRouter, vLLM |
+| `FunctionScorer` | teacher forcing | any callable |
+
+### Hosted chat APIs, via `ChoiceScorer`
+
+A chat endpoint returns log-probabilities only for tokens it generated, so it
+cannot teacher-force a supplied action. But ask it for exactly one token with
+`top_logprobs` (up to 20 on OpenAI and on Gemini/Vertex), label the admissible
+actions `A`, `B`, `C` …, and that single distribution **is** the policy.
+
+```python
+import lm_behavior as lb
+
+scorer = lb.ChoiceScorer("gpt-5.5")                     # or any OpenAI-compatible
+scorer = lb.ChoiceScorer("llama-3.3-70b",
+                         base_url="https://api.together.xyz/v1")
+```
+
+Truncation is not what limits this. On a measured ablation over a 151,936-token
+vocabulary, keeping only the top 20 alternatives reproduced the full-vocabulary
+α=0 distances at rank correlation **0.9992**, and the top 50 at **1.0000**.
+
+Two things it costs you:
+
+- **It is a different harness, so it is a different agent.** The policy of a
+  model answering "B" is not the policy of the same model writing
+  `go to the kitchen`. Both are real agents and both make valid maps — but a
+  letter-choice map and a free-form map cannot be compared with each other.
+- **The admissible set must fit inside `top_logprobs`.** With more actions than
+  the cap, `ChoiceScorer` raises rather than flooring the options it cannot
+  observe.
+
+**Anthropic exposes no log-probabilities at all**, so Claude cannot be placed on
+a map by either route.
 
 ## The exact KL is free
 

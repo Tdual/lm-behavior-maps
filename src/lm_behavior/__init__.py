@@ -36,7 +36,7 @@ from .kl import epsilon, exact_symmetric_kl, pairwise_exact_kl
 from .map2d import mds, procrustes, rank_preservation
 from .references import load as load_references
 from .references import save as save_references
-from .scorer import Scorer
+from .scorer import PolicyScorer, Scorer
 from .scorers import FunctionScorer
 from .scoring import Agent, score_all, score_references, shared_admissible, softmax
 from .tangent import fisher_rao_log, step_angles
@@ -57,6 +57,7 @@ __all__ = [
     "PrerenderedHarness",
     "ReferenceSet",
     "ScoreCache",
+    "PolicyScorer",
     "Scorer",
     "Step",
     "Trajectory",
@@ -89,7 +90,7 @@ __all__ = [
 
 
 def __getattr__(name):
-    if name in ("HFScorer", "LMEvalScorer"):
+    if name in ("HFScorer", "LMEvalScorer", "ChoiceScorer", "EchoScorer"):
         from . import scorers
 
         return getattr(scorers, name)

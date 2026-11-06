@@ -25,10 +25,14 @@ dependencies = ["numpy>=1.24"]
 [project.optional-dependencies]
 hf = ["torch>=2.1", "transformers>=4.40"]
 lmeval = ["lm-eval>=0.4"]
+openai = ["openai>=1.40"]
 stats = ["scipy>=1.10"]
 viz = ["matplotlib>=3.7"]
 dev = ["pytest>=8", "ruff>=0.6", "scipy>=1.10"]
-all = ["torch>=2.1", "transformers>=4.40", "lm-eval>=0.4", "scipy>=1.10", "matplotlib>=3.7"]
+all = [
+  "torch>=2.1", "transformers>=4.40", "lm-eval>=0.4", "openai>=1.40",
+  "scipy>=1.10", "matplotlib>=3.7",
+]
 
 [project.scripts]
 lm-behavior = "lm_behavior.cli:main"
