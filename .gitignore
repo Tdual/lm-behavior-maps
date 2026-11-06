@@ -10,3 +10,4 @@ build/
 .lm_behavior_cache/
 *.npz
 examples/refs.json
+dist/
