@@ -26,6 +26,7 @@ def to_dict(refs: ReferenceSet) -> dict:
                         "admissible": s.admissible,
                         "action": s.action,
                         **({"context": s.context} if s.context is not None else {}),
+                        **({"role": s.role} if s.role is not None else {}),
                     }
                     for s in t.steps
                 ],
@@ -48,6 +49,7 @@ def from_dict(data: dict) -> ReferenceSet:
                         admissible=list(s["admissible"]),
                         action=s["action"],
                         context=s.get("context"),
+                        role=s.get("role"),
                     )
                     for s in t["steps"]
                 ],

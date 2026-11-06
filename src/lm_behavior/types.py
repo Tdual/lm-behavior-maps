@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 
-@dataclass(frozen=True)
+@dataclass
 class Step:
     """One decision point of a reference trajectory.
 
@@ -24,12 +24,20 @@ class Step:
 
     `action` is the action actually recorded at this step. It must be a member
     of `admissible`.
+
+    `role` names the component that made this decision -- "router",
+    "specialist", "synthesiser". A single-agent system leaves it unset. It is
+    what lets one map hold a service whose steps are decided by different
+    models under different prompts, and what lets a change be attributed to the
+    component that caused it.
     """
 
     observation: str
     admissible: list[str]
     action: str
     context: str | None = None  # pre-rendered prompt body, for PrerenderedHarness
+    role: str | None = None  # which component of a multi-agent system decided here
+    meta: dict = field(default_factory=dict)  # raw messages and tools, when imported
 
     def __post_init__(self) -> None:
         if not self.admissible:
@@ -104,6 +112,7 @@ class PolicyVectors:
     action_index: list[int]
     trajectory_id: np.ndarray
     mean_length: float
+    roles: list[str | None] = field(default_factory=list)
     meta: dict = field(default_factory=dict)
 
     @property

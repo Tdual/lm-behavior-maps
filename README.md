@@ -1,16 +1,31 @@
 # lm-behavior-maps
 
-Locate LLM agents by what they *would* do, without running them.
+**Did that prompt change move your agent? Which part of it moved?**
 
-Each agent teacher-forces the actions of a shared set of reference
-trajectories. The per-step log-likelihoods become its coordinates, and the
-distance between two agents tracks the KL divergence between their policies.
-No rollouts, no environment to step, no sampling — the cost is one forward pass
-per (reference step, admissible action), linear in the number of agents.
+Change a system prompt, add a skill, swap a model — then find out how far the
+service's behaviour actually shifted, and which component shifted, **without
+running the service once**.
 
-An **agent** here is an LLM *plus a harness*: history window, system prompt,
-instruction wording, sampling temperature, chat template. Two agents can share
-every weight and still be different points on the map. That is the point.
+```
+role          steps      total   share   per step
+specialist       48     1.8431  97.4%     0.0384
+router           24     0.0492   2.6%     0.0021
+synth            24     0.0000   0.0%     0.0000
+(kl, symmetric, scaled to one session)
+```
+
+You edited the specialist's prompt. The router moved a little, the synthesiser
+not at all. That took zero rollouts and no evaluation set.
+
+It works by replaying the decision points of a recorded run: each
+configuration scores the actions that were actually taken, and the distance
+between the resulting coordinates tracks the KL divergence between the two
+policies. Record once with the LangGraph or CrewAI adapter, then compare as
+many configurations as you like for the cost of one forward pass per decision.
+
+**What it answers is "how much did this change the behaviour", not "is it
+better".** It is a regression detector, not a benchmark — a cheap filter to run
+before the expensive evaluation, or to catch the change nobody intended.
 
 This implements the method of *Agent Behavior Maps*
 ([arXiv:2610.30014](https://arxiv.org/abs/2610.30014)), with an
@@ -22,36 +37,100 @@ measurements are quoted throughout this README and in the docstrings.
 ## Install
 
 ```bash
-pip install lm-behavior-maps          # core: numpy only
-pip install "lm-behavior-maps[hf]"    # + local HuggingFace weights
-pip install "lm-behavior-maps[lmeval]" # + any lm-evaluation-harness model
+pip install lm-behavior-maps             # core: numpy only
+pip install "lm-behavior-maps[hf]"        # + local HuggingFace weights
+pip install "lm-behavior-maps[openai]"    # + hosted APIs (OpenAI, Gemini, Together, ...)
+pip install "lm-behavior-maps[langgraph]" # + the LangGraph recorder
+pip install "lm-behavior-maps[crewai]"    # + the CrewAI recorder
+pip install "lm-behavior-maps[lmeval]"    # + any lm-evaluation-harness model
 ```
 
-## Use
+## A multi-agent service, end to end
 
 ```python
 import lm_behavior as lb
 
-refs   = lb.load_references("refs.json")
-scorer = lb.HFScorer("Qwen/Qwen2.5-0.5B-Instruct")
+# 1. record one run of the service you already have
+recorder = lb.LangGraphRecorder(session="thread-1")
+app.invoke(state, {"callbacks": [recorder]})
+refs = recorder.references()
 
-agents = [
-    lb.Agent("window-4", scorer, lb.BaseHarness(window=4)),
-    lb.Agent("window-1", scorer, lb.BaseHarness(window=1)),
-    lb.Agent("no-system", scorer, lb.BaseHarness(window=4, system=None)),
-    lb.Agent("hot", scorer, lb.BaseHarness(window=4), temperature=1.25),
-]
+# 2. describe the configurations you want to compare
+def configuration(name, specialist_prompt, skills):
+    scorer = lb.ChoiceScorer("gpt-5.5")          # or lb.HFScorer("...") locally
+    return lb.MultiAgent(name, roles={
+        "router":     lb.Role(scorer, lb.ChatHarness(system=ROUTER_PROMPT)),
+        "specialist": lb.Role(scorer, lb.ChatHarness(system=specialist_prompt,
+                                                     skills=skills)),
+        "synth":      lb.Role(scorer, lb.ChatHarness(system=SYNTH_PROMPT)),
+    })
 
-vectors = lb.score_all(agents, refs, cache=lb.ScoreCache())
+old = configuration("v1", SPECIALIST_V1, ("search_kb", "fetch_doc"))
+new = configuration("v2", SPECIALIST_V2, ("search_kb", "fetch_doc", "check_billing"))
 
-print(lb.diagnose(vectors))        # before anything else: is this in scope?
+# 3. score both against the same decision points
+v1, v2 = lb.score_all([old, new], refs, cache=lb.ScoreCache())
 
-coords     = lb.embed_all(vectors, alpha=0)
-names, d   = lb.pairwise(coords)
-layout, kept = lb.mds(d)
+# 4. read what moved
+print(lb.format_by_role(lb.by_role(v1, v2)))
+for index, role, value in lb.top_steps(v1, v2, n=5):
+    print(f"step {index}  {role}  {value:.4f}")
 ```
 
-Or from the shell:
+`examples/service_regression.py` is this script, runnable with no API key.
+
+### CrewAI
+
+```python
+recorder = lb.CrewAIRecorder(session="run-1")
+with recorder:
+    crew.kickoff(inputs=...)
+refs = recorder.references()
+```
+
+### Anything else
+
+Both adapters produce the same small contract, which is what to write against
+if your framework is not one of them:
+
+```python
+steps = [lb.TraceStep(session="s1", role="router",
+                      messages=[{"role": "user", "content": "..."}],
+                      admissible=["search", "fetch", "__finish__"],
+                      action="search")]
+refs = lb.build_references(steps)
+```
+
+## What changes can be compared
+
+A comparison holds when both configurations face the same decision points.
+
+| Change | Comparable |
+|---|---|
+| system prompt, instruction wording | **yes** |
+| skill or tool *description* | **yes** |
+| model, temperature, sampling | **yes** |
+| adding a tool | **partly** — measured as how preference over the existing options shifted; pass `extra_actions` to put the new one in front of both |
+| adding a component, changing who runs when | **no** — the new configuration does not produce these steps at all |
+
+Free-form prose is out of scope throughout: the method needs a finite, known
+set of options at each step. In an agent service that set is the tool list and
+the routing choice, which is where the behaviour lives anyway.
+
+## Single agent
+
+```python
+refs   = lb.load_references("refs.json")
+scorer = lb.HFScorer("Qwen/Qwen2.5-0.5B-Instruct")
+agents = [lb.Agent("window-4", scorer, lb.BaseHarness(window=4)),
+          lb.Agent("window-1", scorer, lb.BaseHarness(window=1))]
+
+vectors    = lb.score_all(agents, refs, cache=lb.ScoreCache())
+names, d   = lb.pairwise(lb.embed_all(vectors, alpha=0))
+layout, _  = lb.mds(d)
+```
+
+From the shell:
 
 ```bash
 lm-behavior diagnose --refs refs.json --agents agents.json
@@ -142,6 +221,11 @@ teacher forcing, one call per step instead of one per action.
 | `EchoScorer` | teacher forcing | `/v1/completions` with `echo=true` — vLLM's server, providers that kept the endpoint |
 | `ChoiceScorer` | policy | **any chat API with `top_logprobs`** — OpenAI, Azure, Gemini/Vertex, Together, Fireworks, OpenRouter, vLLM |
 | `FunctionScorer` | teacher forcing | any callable |
+
+| Recorder | Captures from | Verified against |
+|---|---|---|
+| `LangGraphRecorder` | LangChain callbacks: node name, bound tools, `tool_calls` | langgraph 1.2.20, langchain-core 1.7.6 |
+| `CrewAIRecorder` | the event bus: `LLMCallStartedEvent` + `LLMCallCompletedEvent`, paired by `call_id` | crewai 1.15.36 |
 
 ### Hosted chat APIs, via `ChoiceScorer`
 

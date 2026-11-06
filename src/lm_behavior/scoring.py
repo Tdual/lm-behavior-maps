@@ -14,6 +14,7 @@ import numpy as np
 
 from .cache import ScoreCache
 from .harness import BaseHarness, Harness
+from .multiagent import MultiAgent, Role
 from .scorer import Scorer
 from .types import PolicyVectors, ReferenceSet
 
@@ -44,30 +45,35 @@ class Agent:
 
 
 def score_references(
-    agent: Agent,
+    agent: Agent | MultiAgent,
     references: ReferenceSet,
     *,
     cache: ScoreCache | None = None,
     progress: bool = False,
 ) -> PolicyVectors:
     """Score every admissible action at every reference step."""
+    if isinstance(agent, MultiAgent):
+        return _score_multi(agent, references, cache=cache, progress=progress)
     bodies: list[str] = []
     actions: list[list[str]] = []
     action_index: list[int] = []
     trajectory_id: list[int] = []
 
+    step_roles: list[str | None] = []
     for r, t, traj, step in references.flat():
         bodies.append(agent.harness.body(traj, t))
         actions.append(list(step.admissible))
         action_index.append(step.action_index)
         trajectory_id.append(r)
+        step_roles.append(step.role)
 
     fp = agent.scorer.fingerprint
     system = agent.system
 
     if hasattr(agent.scorer, "policy"):
         return _score_by_policy(
-            agent, references, bodies, actions, action_index, trajectory_id, cache, progress
+            agent, references, bodies, actions, action_index, trajectory_id,
+            step_roles, cache, progress
         )
 
     wanted: list[tuple[str, str]] = []
@@ -105,6 +111,7 @@ def score_references(
         action_index=action_index,
         trajectory_id=np.asarray(trajectory_id, dtype=np.int64),
         mean_length=references.mean_length,
+        roles=step_roles,
         meta={
             "scorer": fp,
             "temperature": agent.temperature,
@@ -115,8 +122,85 @@ def score_references(
     )
 
 
+def _score_multi(
+    agent: MultiAgent,
+    references: ReferenceSet,
+    *,
+    cache: ScoreCache | None = None,
+    progress: bool = False,
+) -> PolicyVectors:
+    """Score each step with the component that owns it, then reassemble in order.
+
+    Steps are grouped by role so each component's weights are visited once, and
+    put back in reference order afterwards -- the coordinate is defined by the
+    order of the reference steps, so shuffling it would silently misalign every
+    pairwise quantity.
+    """
+    groups: dict[str, list[int]] = {}
+    roles: list[str | None] = []
+    for k, (_, _t, _traj, step) in enumerate(references.flat()):
+        agent.for_role(step.role)  # fail now, not after an hour of scoring
+        roles.append(step.role)
+        groups.setdefault(step.role or "", []).append(k)
+
+    policies: list[np.ndarray | None] = [None] * len(roles)
+    raw: list[np.ndarray | None] = [None] * len(roles)
+    action_index: list[int] = [0] * len(roles)
+    trajectory_id = np.zeros(len(roles), dtype=np.int64)
+    flat = list(references.flat())
+
+    for role_key, indices in groups.items():
+        role: Role = agent.for_role(role_key or None)
+        subset = _Subset(references, [flat[i] for i in indices])
+        part = score_references(
+            Agent(f"{agent.name}:{role_key or 'default'}", role.scorer,
+                  role.harness, role.temperature),
+            subset, cache=cache, progress=progress,
+        )
+        for slot, k in enumerate(indices):
+            policies[k] = part.policies[slot]
+            raw[k] = part.raw[slot]
+            action_index[k] = part.action_index[slot]
+            trajectory_id[k] = flat[k][0]
+
+    return PolicyVectors(
+        name=agent.name,
+        policies=[p for p in policies if p is not None],
+        raw=[r for r in raw if r is not None],
+        action_index=action_index,
+        trajectory_id=trajectory_id,
+        mean_length=references.mean_length,
+        roles=roles,
+        meta={
+            "multi_agent": True,
+            "roles": {k: v.scorer.fingerprint for k, v in agent.roles.items()},
+            "generator": references.generator,
+        },
+    )
+
+
+class _Subset:
+    """A ReferenceSet view over selected steps, keeping T-bar from the whole.
+
+    T-bar scales the KL estimate to a trajectory, and that scaling belongs to
+    the reference set as a whole; recomputing it from a role's own steps would
+    give each component a different scale.
+    """
+
+    def __init__(self, parent: ReferenceSet, rows):
+        self._rows = rows
+        self.mean_length = parent.mean_length
+        self.generator = parent.generator
+        self.n_steps = len(rows)
+        self.n_trajectories = parent.n_trajectories
+
+    def flat(self):
+        return iter(self._rows)
+
+
 def _score_by_policy(
-    agent, references, bodies, actions, action_index, trajectory_id, cache, progress
+    agent, references, bodies, actions, action_index, trajectory_id, step_roles,
+    cache, progress
 ) -> PolicyVectors:
     """Backends that hand back a whole distribution: one call per step.
 
@@ -162,6 +246,7 @@ def _score_by_policy(
         action_index=action_index,
         trajectory_id=np.asarray(trajectory_id, dtype=np.int64),
         mean_length=references.mean_length,
+        roles=step_roles,
         meta={
             "scorer": fp,
             "temperature": agent.temperature,
@@ -174,7 +259,7 @@ def _score_by_policy(
 
 
 def score_all(
-    agents: Iterable[Agent],
+    agents: Iterable[Agent | MultiAgent],
     references: ReferenceSet,
     *,
     cache: ScoreCache | None = None,

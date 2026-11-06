@@ -85,10 +85,12 @@ def diagnose(
 
     eps = [epsilon(vectors[i], vectors[j]) for i, j in zip(*iu, strict=True)]
 
-    if spread < min_spread:
+    # With fewer than three pairs the spread is max/min over one or two values
+    # and carries no information -- it is 1.0 by definition for a single pair.
+    if len(vals) >= 3 and spread < min_spread:
         warnings.append(
             f"true distances span only {spread:.1f}x. The map has little order to "
-            f"recover; a measured run at {spread:.1f}x produced a rank correlation of 0.39"
+            "recover; a measured run at 4.5x produced a rank correlation of 0.39"
         )
     if saturation > max_saturation:
         warnings.append(
@@ -97,7 +99,10 @@ def diagnose(
             "which is outside the close-pair regime the guarantees cover"
         )
     if len(vals) < 10:
-        warnings.append(f"only {len(vals)} pairs; correlations will not be meaningful")
+        warnings.append(
+            f"only {len(vals)} pairs; correlations will not be meaningful. "
+            "Pairwise distances and the per-role breakdown are still exact"
+        )
 
     return Diagnosis(
         n_agents=len(vectors),

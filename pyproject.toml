@@ -5,12 +5,15 @@ build-backend = "hatchling.build"
 [project]
 name = "lm-behavior-maps"
 version = "0.1.0"
-description = "Locate LLM agents by what they would do: teacher-forced policy embeddings and KL-tracking distances, without rollouts."
+description = "Measure how far a prompt, skill or model change moved an LLM agent service, without running it. Works with LangGraph and CrewAI."
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.10"
 authors = [{ name = "tdual" }]
-keywords = ["llm", "agent", "evaluation", "kl-divergence", "information-geometry", "embedding"]
+keywords = [
+  "llm", "agent", "multi-agent", "evaluation", "regression-testing",
+  "langgraph", "crewai", "kl-divergence", "information-geometry",
+]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Science/Research",
@@ -26,11 +29,14 @@ dependencies = ["numpy>=1.24"]
 hf = ["torch>=2.1", "transformers>=4.40"]
 lmeval = ["lm-eval>=0.4"]
 openai = ["openai>=1.40"]
+langgraph = ["langgraph>=1.0", "langchain-core>=1.0"]
+crewai = ["crewai>=1.0"]
 stats = ["scipy>=1.10"]
 viz = ["matplotlib>=3.7"]
-dev = ["pytest>=8", "ruff>=0.6", "scipy>=1.10"]
+dev = ["pytest>=8", "ruff>=0.6", "scipy>=1.10", "langgraph>=1.0", "langchain-core>=1.0", "crewai>=1.0"]
 all = [
   "torch>=2.1", "transformers>=4.40", "lm-eval>=0.4", "openai>=1.40",
+  "langgraph>=1.0", "langchain-core>=1.0", "crewai>=1.0",
   "scipy>=1.10", "matplotlib>=3.7",
 ]
 
