@@ -16,7 +16,7 @@ This implements the method of *Agent Behavior Maps*
 ([arXiv:2610.30014](https://arxiv.org/abs/2610.30014)), with an
 information-geometric re-derivation of the coordinate and a scope check the
 paper does not provide. It grew out of a
-[small reproduction](https://github.com/Tdual/agent-behavior-maps) whose
+[small reproduction](https://github.com/Tdual/agent-behavior-maps-repro) whose
 measurements are quoted throughout this README and in the docstrings.
 
 ## Install
