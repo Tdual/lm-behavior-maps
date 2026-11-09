@@ -1,5 +1,7 @@
 # lm-behavior-maps
 
+[![ci](https://github.com/Tdual/lm-behavior-maps/actions/workflows/ci.yml/badge.svg)](https://github.com/Tdual/lm-behavior-maps/actions/workflows/ci.yml)
+
 **Did that prompt change move your agent? Which part of it moved?**
 
 Change a system prompt, add a skill, swap a model — then find out how far the
