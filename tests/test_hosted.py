@@ -211,3 +211,54 @@ def test_echo_scorer_matches_hf_on_a_reconstructed_response():
     got = np.array(echo.loglikelihood(cases))
     want = np.array(hf.loglikelihood(cases))
     assert np.abs(got - want).max() < 1e-3
+
+
+class RaisingChat:
+    """A client whose endpoint refuses the request, with a real error message."""
+
+    def __init__(self, message):
+        self.message = message
+        self.chat = SimpleNamespace(completions=SimpleNamespace(create=self._create))
+
+    def _create(self, **kwargs):
+        raise RuntimeError(self.message)
+
+
+# The three refusals below are the verbatim messages the OpenAI API returned on
+# 2026-11-09 for gpt-5.4-nano and gpt-5-mini. Each one is a configuration
+# mistake with a known fix, so the scorer must name the fix.
+@pytest.mark.parametrize(
+    ("message", "expected"),
+    [
+        ("Invalid value for 'top_logprobs': must be less than or equal to 5.",
+         "top_logprobs=5"),
+        ("You are not allowed to request logprobs from this model",
+         "reasoning_effort='none'"),
+        ("Could not finish the message because max_tokens or model output limit was reached.",
+         "max_completion_tokens above 1"),
+    ],
+)
+def test_choice_scorer_translates_the_endpoints_refusals(message, expected):
+    s = lb.ChoiceScorer("gpt-x", client=RaisingChat(message))
+    with pytest.raises(ValueError, match=r".*") as excinfo:
+        s.policy("body", ["x", "y"])
+    assert expected in str(excinfo.value)
+    assert message in str(excinfo.value)  # the raw endpoint text is never swallowed
+
+
+def test_choice_scorer_passes_the_reasoning_knobs_through():
+    client = FakeChat([("A", math.log(1.0))])
+    s = lb.ChoiceScorer("gpt-5.4-nano", client=client, top_logprobs=5,
+                        reasoning_effort="none", max_completion_tokens=16)
+    s.policy("body", ["x", "y"])
+    call = client.calls[-1]
+    assert call["top_logprobs"] == 5
+    assert call["reasoning_effort"] == "none"
+    assert call["max_completion_tokens"] == 16
+
+
+def test_choice_scorer_omits_temperature_when_asked_to():
+    """Some endpoints reject `temperature` outright."""
+    client = FakeChat([("A", math.log(1.0))])
+    lb.ChoiceScorer("gpt-x", client=client, temperature=None).policy("body", ["x", "y"])
+    assert "temperature" not in client.calls[-1]

@@ -57,7 +57,7 @@ refs = recorder.references()
 
 # 2. describe the configurations you want to compare
 def configuration(name, specialist_prompt, skills):
-    scorer = lb.ChoiceScorer("gpt-5.5")          # or lb.HFScorer("...") locally
+    scorer = lb.ChoiceScorer("gpt-4.1-mini")     # or lb.HFScorer("...") locally
     return lb.MultiAgent(name, roles={
         "router":     lb.Role(scorer, lb.ChatHarness(system=ROUTER_PROMPT)),
         "specialist": lb.Role(scorer, lb.ChatHarness(system=specialist_prompt,
@@ -219,7 +219,7 @@ teacher forcing, one call per step instead of one per action.
 | `HFScorer` | teacher forcing | local weights via `transformers` |
 | `LMEvalScorer` | teacher forcing | any lm-evaluation-harness model (HF, vLLM, …) |
 | `EchoScorer` | teacher forcing | `/v1/completions` with `echo=true` — vLLM's server, providers that kept the endpoint |
-| `ChoiceScorer` | policy | **any chat API with `top_logprobs`** — OpenAI, Azure, Gemini/Vertex, Together, Fireworks, OpenRouter, vLLM |
+| `ChoiceScorer` | policy | **any chat API with `top_logprobs`** — OpenAI, Azure, Gemini/Vertex, Together, Fireworks, OpenRouter, vLLM. Verified live against `gpt-4.1-mini`, `gpt-4o-mini` and `gpt-5.4-nano` |
 | `FunctionScorer` | teacher forcing | any callable |
 
 | Recorder | Captures from | Verified against |
@@ -231,16 +231,31 @@ teacher forcing, one call per step instead of one per action.
 
 A chat endpoint returns log-probabilities only for tokens it generated, so it
 cannot teacher-force a supplied action. But ask it for exactly one token with
-`top_logprobs` (up to 20 on OpenAI and on Gemini/Vertex), label the admissible
-actions `A`, `B`, `C` …, and that single distribution **is** the policy.
+`top_logprobs`, label the admissible actions `A`, `B`, `C` …, and that single
+distribution **is** the policy.
 
 ```python
 import lm_behavior as lb
 
-scorer = lb.ChoiceScorer("gpt-5.5")                     # or any OpenAI-compatible
+scorer = lb.ChoiceScorer("gpt-4.1-mini")                # or any OpenAI-compatible
 scorer = lb.ChoiceScorer("llama-3.3-70b",
                          base_url="https://api.together.xyz/v1")
+
+scorer = lb.ChoiceScorer("gpt-5.4-nano", top_logprobs=5,  # a reasoning model
+                         reasoning_effort="none", max_completion_tokens=16)
 ```
+
+What the endpoint allows is the real constraint, and it differs by model.
+Measured against the OpenAI API on 2026-11-09:
+
+| model family | `top_logprobs` | what it needs |
+|---|---|---|
+| `gpt-4.1`, `gpt-4o` | 20 | nothing — the defaults work |
+| `gpt-5.x` reasoning | **5** | `reasoning_effort="none"` and `max_completion_tokens` above 1; reasoning tokens are spent out of the same budget, so the default of 1 returns no content at all. The cap also limits the admissible set to 5 actions |
+| `gpt-5-mini` | — | refuses log-probabilities outright (HTTP 403) |
+
+`ChoiceScorer` translates each of those three failures into the configuration
+that fixes it rather than passing the raw endpoint error through.
 
 Truncation is not what limits this. On a measured ablation over a 151,936-token
 vocabulary, keeping only the top 20 alternatives reproduced the full-vocabulary
