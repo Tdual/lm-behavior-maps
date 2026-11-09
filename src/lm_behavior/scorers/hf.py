@@ -78,6 +78,18 @@ class HFScorer:
             f":chat={int(self.chat)}:sp={int(self.prefix_space)}"
         )
 
+    def _continuation(self, action: str) -> str:
+        """The action as it is tokenised: a leading space, but never two.
+
+        An action handed in as `" go north"` already carries its separator, and
+        prepending another produced a different token sequence -- and a
+        log-likelihood 4.4 nats away from the joint tokenisation that lm-eval
+        and a from-scratch reference both compute. Measured on SmolLM2-135M.
+        """
+        if not self.prefix_space or action[:1].isspace():
+            return action
+        return " " + action
+
     def close(self) -> None:
         import gc
 
@@ -113,7 +125,7 @@ class HFScorer:
         torch = self._torch
         pre = [self._prefix_ids(b, system) for b, _ in pairs]
         cont = [
-            self.tok((" " if self.prefix_space else "") + a, add_special_tokens=False)["input_ids"]
+            self.tok(self._continuation(a), add_special_tokens=False)["input_ids"]
             for _, a in pairs
         ]
         seqs = [p + c for p, c in zip(pre, cont, strict=True)]

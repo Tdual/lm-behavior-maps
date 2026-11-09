@@ -217,14 +217,14 @@ teacher forcing, one call per step instead of one per action.
 | Backend | Primitive | Runs on |
 |---|---|---|
 | `HFScorer` | teacher forcing | local weights via `transformers` |
-| `LMEvalScorer` | teacher forcing | any lm-evaluation-harness model (HF, vLLM, …) |
+| `LMEvalScorer` | teacher forcing | any lm-evaluation-harness model (HF, vLLM, …). Cross-checked against `HFScorer` on the same model and harness to **2.3e-05** |
 | `EchoScorer` | teacher forcing | `/v1/completions` with `echo=true` — vLLM's server, providers that kept the endpoint |
 | `ChoiceScorer` | policy | **any chat API with `top_logprobs`** — OpenAI, Azure, Gemini/Vertex, Together, Fireworks, OpenRouter, vLLM. Verified live against `gpt-4.1-mini`, `gpt-4o-mini` and `gpt-5.4-nano` |
 | `FunctionScorer` | teacher forcing | any callable |
 
 | Recorder | Captures from | Verified against |
 |---|---|---|
-| `LangGraphRecorder` | LangChain callbacks: node name, bound tools, `tool_calls` | langgraph 1.2.20, langchain-core 1.7.6 |
+| `LangGraphRecorder` | LangChain callbacks: node name, bound tools, `tool_calls`, and the bare-label replies a conditional edge branches on | langgraph 1.2.20, langchain-core 1.7.6, verified live with `gpt-4.1-mini` |
 | `CrewAIRecorder` | the event bus: `LLMCallStartedEvent` + `LLMCallCompletedEvent`, paired by `call_id` | crewai 1.15.36 |
 
 ### Hosted chat APIs, via `ChoiceScorer`
@@ -273,6 +273,21 @@ Two things it costs you:
 
 **Anthropic exposes no log-probabilities at all**, so Claude cannot be placed on
 a map by either route.
+
+### Decisions a conditional edge turns on
+
+A LangGraph router that asks the model for a bare label and branches on the
+answer binds no tools, so nothing in the callback payload says what the options
+were. Declare them and the decision is measured like any other:
+
+```python
+rec = lb.LangGraphRecorder(node_actions={"triage": ["billing", "technical"]})
+```
+
+The label is matched against the reply case-insensitively, whole word before
+substring. A reply that names none of the labels — or two of them — is dropped
+and counted in `skipped_unmatched`, because declaration order is not evidence
+and a guess here would put a fabricated action into the reference set.
 
 ## The exact KL is free
 

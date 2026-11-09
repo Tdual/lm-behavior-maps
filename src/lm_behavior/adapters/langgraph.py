@@ -11,11 +11,24 @@ and langchain-core 1.7.6, where:
     but *not* the metadata -- so the two halves are paired by `run_id`.
 
 A node that does not call a model, or calls one with no tools bound, records
-nothing: there is no policy over a finite set to measure there.
+nothing by default: there is no policy over a finite set to measure there.
+
+The exception is the decision a conditional edge turns on. A router that asks
+the model for a bare label -- "billing" or "technical" -- and branches on the
+answer binds no tools, so nothing in the callback payload says what the options
+were. Declare them and that decision becomes measurable like any other:
+
+    LangGraphRecorder(node_actions={"triage": ["billing", "technical"]})
+
+The label is matched against the generated text case-insensitively, whole word
+first and then as a substring. A reply that matches none of the declared labels
+is dropped rather than guessed at, and counted in `skipped_unmatched`.
 """
 
 from __future__ import annotations
 
+import re
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from .trace import FINISH, TraceStep
@@ -38,6 +51,42 @@ def _tool_names(invocation_params: dict | None) -> list[str]:
     return names
 
 
+def _text(response) -> str:
+    """The generated text of the first generation, however it is carried."""
+    try:
+        generation = response.generations[0][0]
+    except (AttributeError, IndexError):
+        return ""
+    message = getattr(generation, "message", None)
+    content = getattr(message, "content", None) if message is not None else None
+    if content is None:
+        content = getattr(generation, "text", "")
+    if isinstance(content, list):  # a content-block list, as newer models return
+        parts = [b.get("text", "") for b in content if isinstance(b, dict)]
+        content = " ".join(parts)
+    return str(content or "")
+
+
+def _match_label(text: str, labels: list[str]) -> str | None:
+    """The one declared label the reply names, or None.
+
+    A whole word wins over an incidental substring. A reply that names several
+    of the labels is ambiguous, and returns None like one that names none:
+    picking by declaration order would put a guess into the reference set.
+    """
+    low = text.strip().lower()
+    words = set(re.findall(r"[a-z0-9_]+", low))
+    for hits in (
+        [x for x in labels if x.strip().lower() in words],
+        [x for x in labels if x.strip().lower() in low],
+    ):
+        if len(hits) == 1:
+            return hits[0]
+        if hits:
+            return None
+    return None
+
+
 def _as_message(message: Any) -> dict:
     role = {
         "human": "user",
@@ -57,6 +106,9 @@ class LangGraphRecorder(BaseCallbackHandler):
 
     `session` groups steps into a trajectory. Pass a new one per conversation,
     or set `session_from` to read it off the run's metadata.
+
+    `node_actions` maps a node name to the labels its reply is chosen from, for
+    the text-label routers a conditional edge branches on.
     """
 
     def __init__(
@@ -66,13 +118,16 @@ class LangGraphRecorder(BaseCallbackHandler):
         session_from: str | None = None,
         finish_action: str = FINISH,
         include_nodes: set[str] | None = None,
+        node_actions: Mapping[str, Sequence[str]] | None = None,
     ):
         self.session = session
         self.session_from = session_from
         self.finish_action = finish_action
         self.include_nodes = include_nodes
+        self.node_actions = {k: list(v) for k, v in (node_actions or {}).items()}
         self.steps: list[TraceStep] = []
         self.skipped_no_tools = 0
+        self.skipped_unmatched = 0
         self._pending: dict[Any, dict] = {}
 
     # -- LangChain callback protocol -------------------------------------
@@ -83,7 +138,8 @@ class LangGraphRecorder(BaseCallbackHandler):
         if self.include_nodes is not None and node not in self.include_nodes:
             return
         tools = _tool_names(kwargs.get("invocation_params"))
-        if not tools:
+        labels = self.node_actions.get(str(node))
+        if not tools and not labels:
             self.skipped_no_tools += 1
             return
         batch = messages[0] if messages else []
@@ -95,12 +151,16 @@ class LangGraphRecorder(BaseCallbackHandler):
             "role": str(node or "graph"),
             "messages": [_as_message(m) for m in batch],
             "tools": tools,
+            "labels": labels,
             "step": metadata.get("langgraph_step"),
         }
 
     def on_llm_end(self, response, **kwargs) -> None:
         started = self._pending.pop(kwargs.get("run_id"), None)
         if started is None:
+            return
+        if started["labels"] is not None:
+            self._record_label(started, response)
             return
         chosen = self._chosen(response)
         options = list(started["tools"])
@@ -119,6 +179,24 @@ class LangGraphRecorder(BaseCallbackHandler):
                 admissible=options,
                 action=chosen,
                 meta={"langgraph_step": started["step"]},
+            )
+        )
+
+    def _record_label(self, started: dict, response) -> None:
+        """A text-label router: the reply itself is the action."""
+        labels = started["labels"]
+        chosen = _match_label(_text(response), labels)
+        if chosen is None:
+            self.skipped_unmatched += 1
+            return
+        self.steps.append(
+            TraceStep(
+                session=started["session"],
+                role=started["role"],
+                messages=started["messages"],
+                admissible=list(labels),
+                action=chosen,
+                meta={"langgraph_step": started["step"], "from": "label"},
             )
         )
 

@@ -1,0 +1,53 @@
+name: release
+
+# Publishes to PyPI when a version tag is pushed. Credentials are not stored:
+# PyPI's trusted publishing mints a short-lived token from this workflow's
+# OIDC identity, so there is no API token in the repository or in anyone's
+# shell. The one-time setup is on PyPI: Publishing -> add a GitHub publisher
+# with owner Tdual, repository lm-behavior-maps, workflow release.yml,
+# environment pypi.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install build twine
+      - run: python -m build
+      - run: twine check --strict dist/*
+      # The tag has to agree with the version in pyproject.toml, or the release
+      # is published under a number nothing else refers to.
+      - name: the tag must match the packaged version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          packaged=$(ls dist/*.tar.gz | sed -E 's/.*-([0-9][^-]*)\.tar\.gz/\1/')
+          tagged=${GITHUB_REF_NAME#v}
+          echo "packaged=$packaged tagged=$tagged"
+          test "$packaged" = "$tagged"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/*
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write  # the only credential: an OIDC token PyPI trusts
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      - uses: pypa/gh-action-pypi-publish@release/v1

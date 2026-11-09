@@ -131,3 +131,25 @@ def test_diagnose_reports_the_pair_count(vectors):
 def test_diagnose_needs_two_agents(vectors):
     with pytest.raises(ValueError):
         lb.diagnose(vectors[:1])
+
+
+def test_format_by_role_flags_a_total_that_is_only_noise():
+    """100% of nothing is nothing; the percentages must not read as a finding."""
+    from lm_behavior.attribution import RoleContribution, format_by_role
+
+    text = format_by_role([
+        RoleContribution(role="triage", n_steps=1, total=3e-9, share=1.0, per_step=3e-9),
+        RoleContribution(role="specialist", n_steps=1, total=0.0, share=0.0, per_step=0.0),
+    ])
+    assert "indistinguishable" in text
+    assert "total" in text
+
+
+def test_format_by_role_stays_quiet_on_a_real_total():
+    from lm_behavior.attribution import RoleContribution, format_by_role
+
+    text = format_by_role([
+        RoleContribution(role="specialist", n_steps=4, total=1.9806, share=1.0, per_step=0.495),
+    ])
+    assert "indistinguishable" not in text
+    assert "1.9806" in text

@@ -138,6 +138,19 @@ def test_a_trace_drives_a_full_multi_agent_comparison():
 # ---------------------------------------------------------------- langgraph
 
 
+try:  # the lane-carrying state for the conditional-edge tests
+    from typing import Annotated, TypedDict
+
+    from langgraph.graph.message import add_messages
+
+    class LaneState(TypedDict):
+        messages: Annotated[list, add_messages]
+        lane: str
+
+except ImportError:  # pragma: no cover - import guard
+    LaneState = None  # type: ignore[assignment,misc]
+
+
 @pytest.fixture
 def langgraph_app():
     pytest.importorskip("langgraph")
@@ -342,3 +355,75 @@ def test_crewai_recorder_registers_on_the_real_event_bus(crew_events):
     # after the scope, further events must not be collected
     emit(started(call_id="c10", messages=[], tools=[], agent_role="x"))
     assert len(rec.steps) == 1
+
+
+# ------------------------------------------- conditional-edge label decisions
+
+
+def _label_graph(reply: str):
+    """A graph whose branch is decided by a bare label the model emits."""
+    pytest.importorskip("langgraph")
+    pytest.importorskip("langchain_core")
+    from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
+    from langchain_core.messages import AIMessage, HumanMessage
+    from langgraph.graph import END, START, StateGraph
+
+    plain = GenericFakeChatModel(messages=iter([AIMessage(content=reply)]))
+
+    def triage(state):
+        out = plain.invoke(state["messages"])
+        return {"messages": [out], "lane": out.content.strip().lower()}
+
+    g = StateGraph(LaneState)
+    g.add_node("triage", triage)
+    g.add_edge(START, "triage")
+    g.add_edge("triage", END)
+    return g.compile(), HumanMessage("my invoice looks wrong")
+
+
+def test_langgraph_records_a_conditional_edge_label():
+    """No tools are bound, so only the declared labels make the step readable."""
+    app, msg = _label_graph("billing")
+    rec = lb.LangGraphRecorder(node_actions={"triage": ["billing", "technical"]})
+    app.invoke({"messages": [msg], "lane": ""}, {"callbacks": [rec]})
+    assert len(rec.steps) == 1
+    step = rec.steps[0]
+    assert step.role == "triage"
+    assert step.action == "billing"
+    assert step.admissible == ["billing", "technical"]
+    assert step.meta["from"] == "label"
+    assert rec.skipped_no_tools == 0
+
+
+def test_langgraph_label_matching_prefers_a_whole_word():
+    """`billing` appears only inside `billings`, `technical` as a word."""
+    app, msg = _label_graph("technical, going by our billings history")
+    rec = lb.LangGraphRecorder(node_actions={"triage": ["billing", "technical"]})
+    app.invoke({"messages": [msg], "lane": ""}, {"callbacks": [rec]})
+    assert rec.steps[0].action == "technical"
+
+
+def test_langgraph_drops_a_reply_naming_two_labels():
+    """Declaration order is not evidence, so an ambiguous reply is dropped."""
+    app, msg = _label_graph("This is technical, not a billing problem per se.")
+    rec = lb.LangGraphRecorder(node_actions={"triage": ["billing", "technical"]})
+    app.invoke({"messages": [msg], "lane": ""}, {"callbacks": [rec]})
+    assert rec.steps == []
+    assert rec.skipped_unmatched == 1
+
+
+def test_langgraph_drops_a_reply_matching_no_label():
+    """Guessing here would put a fabricated action into the reference set."""
+    app, msg = _label_graph("I am not sure about this one.")
+    rec = lb.LangGraphRecorder(node_actions={"triage": ["billing", "technical"]})
+    app.invoke({"messages": [msg], "lane": ""}, {"callbacks": [rec]})
+    assert rec.steps == []
+    assert rec.skipped_unmatched == 1
+
+
+def test_langgraph_still_skips_an_undeclared_toolless_node():
+    app, msg = _label_graph("billing")
+    rec = lb.LangGraphRecorder()
+    app.invoke({"messages": [msg], "lane": ""}, {"callbacks": [rec]})
+    assert rec.steps == []
+    assert rec.skipped_no_tools == 1

@@ -7,10 +7,12 @@ than re-implement them, wrap them -- the request shape is the same.
 Two mismatches are handled here and worth knowing about:
 
   * lm-eval returns `(logprob, is_greedy)`; only the log-probability is used.
-  * lm-eval has no system-prompt slot, so a `system` is prepended to the body.
-    A model whose deployed form puts the system prompt in a chat role will sit
-    somewhere slightly different than it would under `HFScorer`. Keep one
-    backend for one map.
+  * lm-eval has no system-prompt slot, so a `system` is prepended to the body,
+    and lm-eval applies no chat template. A model whose deployed form puts the
+    system prompt in a chat role sits somewhere else entirely: measured on
+    SmolLM2-135M, the chat template moved the log-likelihoods by 20.7 nats,
+    while `HFScorer(..., chat=False)` agreed with this backend to 2.3e-05.
+    Keep one backend for one map.
 """
 
 from __future__ import annotations

@@ -56,6 +56,11 @@ def _roles(a: PolicyVectors, b: PolicyVectors) -> list[str]:
     return [r or "(unset)" for r in source]
 
 
+# Below this the two configurations produced the same policy to within float
+# noise, and the per-role percentages are a ratio of two near-zero numbers.
+NEGLIGIBLE = 1e-6
+
+
 def by_role(
     a: PolicyVectors, b: PolicyVectors, *, metric: str = "kl"
 ) -> list[RoleContribution]:
@@ -108,5 +113,16 @@ def format_by_role(contributions: Sequence[RoleContribution], metric: str = "kl"
             f"{c.role:<{width}}{c.n_steps:>7}{c.total:>11.4f}"
             f"{c.share:>7.1%}{c.per_step:>11.4f}"
         )
+    total = sum(c.total for c in contributions)
+    lines.append("-" * len(head))
+    lines.append(f"{'total':<{width}}{'':>7}{total:>11.4f}")
     lines.append(f"({metric}, symmetric, scaled to one trajectory)")
+    # A share is a fraction of the total, so it says nothing when the total is
+    # this small: 100% of nothing is still nothing. Say so rather than let the
+    # percentages read as a finding.
+    if total < NEGLIGIBLE:
+        lines.append(
+            f"the configurations are indistinguishable here (total < {NEGLIGIBLE:g}); "
+            "the shares above are noise"
+        )
     return "\n".join(lines)

@@ -117,3 +117,21 @@ def test_reference_roundtrip(refs, tmp_path):
 def test_step_rejects_an_action_outside_the_admissible_set():
     with pytest.raises(ValueError):
         lb.Step(observation="o", admissible=["a", "b"], action="c")
+
+def test_continuation_never_doubles_the_separator():
+    """An action handed in with its own leading space must not get a second one.
+
+    Measured on SmolLM2-135M: the double space moved the log-likelihood 4.4
+    nats away from the joint tokenisation that lm-eval and a from-scratch
+    reference both compute.
+    """
+    from types import SimpleNamespace
+
+    from lm_behavior.scorers.hf import HFScorer
+
+    on = SimpleNamespace(prefix_space=True)
+    off = SimpleNamespace(prefix_space=False)
+    assert HFScorer._continuation(on, "go north") == " go north"
+    assert HFScorer._continuation(on, " go north") == " go north"
+    assert HFScorer._continuation(on, "\tgo north") == "\tgo north"
+    assert HFScorer._continuation(off, "go north") == "go north"
