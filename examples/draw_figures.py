@@ -54,7 +54,7 @@ def main() -> None:
 
     _, ax = plt.subplots(figsize=(7.0, 3.4))
     drawn = lb.plot_map(coords, title="four configurations of one service", ax=ax)
-    print(lb.save_figure(drawn.ax, str(out / "map.png")), "--", drawn.caption)
+    print(lb.save_figure(drawn.ax, str(out / "behaviour-map.png")), "--", drawn.caption)
 
     names, dist = lb.pairwise(coords)
     print(lb.save_figure(lb.plot_distances(names, dist), str(out / "distances.png")))

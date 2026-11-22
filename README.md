@@ -198,7 +198,7 @@ Every figure below is produced by `python examples/draw_figures.py`, which runs
 with no API key: the recorded trace of `service_regression.py`, four
 configurations of that service, scored by a 135M local model.
 
-<img src="https://raw.githubusercontent.com/Tdual/lm-behavior-maps/main/docs/img/map.png" width="760" alt="the four configurations on the MDS plane">
+<img src="https://raw.githubusercontent.com/Tdual/lm-behavior-maps/main/docs/img/behaviour-map.png" width="760" alt="the four configurations on the MDS plane">
 
 `terse` — the specialist's prompt replaced wholesale — sits furthest out, and
 the two-word edit between `v1` and `v2` is the closest pair. The caption is the
