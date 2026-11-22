@@ -45,6 +45,7 @@ pip install "lm-behavior-maps[openai]"    # + hosted APIs (OpenAI, Gemini, Toget
 pip install "lm-behavior-maps[langgraph]" # + the LangGraph recorder
 pip install "lm-behavior-maps[crewai]"    # + the CrewAI recorder
 pip install "lm-behavior-maps[lmeval]"    # + any lm-evaluation-harness model
+pip install "lm-behavior-maps[viz]"       # + matplotlib, for the drawings
 ```
 
 ## A multi-agent service, end to end
@@ -137,7 +138,39 @@ From the shell:
 ```bash
 lm-behavior diagnose --refs refs.json --agents agents.json
 lm-behavior map      --refs refs.json --agents agents.json --alpha 0 --out map.json
+lm-behavior map      --refs refs.json --agents agents.json --plot map.png
 ```
+
+## Drawing it
+
+`pip install "lm-behavior-maps[viz]"` adds matplotlib and four drawings. The
+core package stays numpy-only; nothing here is imported until you call it.
+
+```python
+coords = lb.embed_all(vectors, alpha=0)
+
+drawn = lb.plot_map(coords)                 # the agents on the MDS plane
+print(drawn.caption, drawn.trustworthy)
+lb.save_figure(drawn.ax, "map.png")
+
+names, d = lb.pairwise(coords)
+lb.save_figure(lb.plot_distances(names, d), "distances.png")        # heatmap
+lb.save_figure(lb.plot_by_role(lb.by_role(v1, v2)), "roles.png")    # what moved
+lb.save_figure(lb.plot_top_steps(lb.top_steps(v1, v2)), "steps.png")
+```
+
+Each drawing carries the caveat of the number it draws, so a picture cannot
+claim more than the measurement does.
+
+| Drawing | What it refuses to hide |
+|---|---|
+| `plot_map` | the retained fraction and rank preservation are in the caption; below 80% retained the figure says **the plane is a drawing, not a measurement** |
+| `plot_map` | axes are equal-aspect and unlabelled — only the distances mean anything, not the orientation or the origin |
+| `plot_by_role` | when the two configurations are indistinguishable, the caption says the bars are noise instead of showing 100% of nothing |
+| `plot_distances` | the matrix is the measurement; read it when the plane is lossy |
+
+`plot_map` needs at least three agents. For two, the distance is the whole
+result and a map adds nothing.
 
 ## Read `diagnose` first
 

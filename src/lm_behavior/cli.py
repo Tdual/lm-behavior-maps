@@ -2,6 +2,7 @@
 
     lm-behavior diagnose --refs refs.json --agents agents.json
     lm-behavior map      --refs refs.json --agents agents.json --alpha 0 --out map.json
+    lm-behavior map      --refs refs.json --agents agents.json --plot map.png
 
 `agents.json` is a list of harness variants over local models:
 
@@ -99,10 +100,17 @@ def cmd_map(args) -> int:
         "layout_retained": retained,
         "layout_rank_preservation": rank_preservation(dist, layout),
     }
+    if args.plot:
+        from .plot import plot_map, save_figure
+
+        coords_by_name = {c.name: c for c in coords}
+        drawn = plot_map([coords_by_name[n] for n in names], metric=args.metric)
+        print(f"wrote {save_figure(drawn.ax, args.plot)}  ({drawn.caption})")
+
     if args.out:
         Path(args.out).write_text(json.dumps(out, indent=1), encoding="utf-8")
         print(f"wrote {args.out}")
-    else:
+    if not args.out:
         width = max(len(n) for n in names) + 2
         print("\npairwise distance")
         print(" " * width + "".join(f"{n:>10}" for n in names))
@@ -134,6 +142,9 @@ def main(argv=None) -> int:
                 "--metric", default=None, choices=["euclidean", "hellinger", "fisher_rao"]
             )
             s.add_argument("--out", default=None)
+            s.add_argument(
+                "--plot", default=None, help="write the 2d map as an image (needs [viz])"
+            )
 
     args = p.parse_args(argv)
     if args.version:

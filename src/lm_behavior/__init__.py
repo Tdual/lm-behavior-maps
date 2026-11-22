@@ -37,6 +37,14 @@ from .harness import BaseHarness, FunctionHarness, Harness, PrerenderedHarness
 from .kl import epsilon, exact_symmetric_kl, pairwise_exact_kl
 from .map2d import mds, procrustes, rank_preservation
 from .multiagent import MultiAgent, Role
+from .plot import (
+    MapPlot,
+    plot_by_role,
+    plot_distances,
+    plot_map,
+    plot_top_steps,
+    save_figure,
+)
 from .references import load as load_references
 from .references import save as save_references
 from .scorer import PolicyScorer, Scorer
@@ -59,6 +67,7 @@ __all__ = [
     "FunctionScorer",
     "Harness",
     "LangGraphRecorder",
+    "MapPlot",
     "MultiAgent",
     "PolicyScorer",
     "PolicyVectors",
@@ -89,8 +98,13 @@ __all__ = [
     "mds",
     "pairwise",
     "pairwise_exact_kl",
+    "plot_by_role",
+    "plot_distances",
+    "plot_map",
+    "plot_top_steps",
     "procrustes",
     "rank_preservation",
+    "save_figure",
     "save_references",
     "score_all",
     "score_references",
