@@ -26,16 +26,13 @@ policies. Record once with the LangGraph or CrewAI adapter, then compare as
 many configurations as you like for the cost of one forward pass per decision.
 
 ```mermaid
-flowchart TB
-  SVC["your LangGraph / CrewAI service"] -- "one recorded run" --> REF["reference decision points &mdash; history, admissible actions, action taken"]
-
-  REF --> A["config A: model + harness"]
-  REF --> B["config B: model + harness"]
-
-  A -- "teacher-forced log-likelihood,<br/>one forward pass per decision" --> D["squared distance &asymp; symmetric trajectory KL"]
-  B -- "the same decision points,<br/>the service is never run again" --> D
-
-  D --> R["by role: which component moved &middot; top steps: which decisions moved &middot; map: where every configuration sits"]
+flowchart LR
+  SVC["your LangGraph<br/>/ CrewAI service"] -- "one<br/>recorded run" --> REF["reference<br/>decision points"]
+  REF --> A["config A"]
+  REF --> B["config B"]
+  A -- "teacher-forced<br/>log-likelihood" --> D["distance²<br/>&asymp; symmetric KL"]
+  B -- "one forward pass<br/>per decision" --> D
+  D --> R["which component moved<br/>which decisions moved<br/>where every config sits"]
 ```
 
 The service is run **once**, to record the decision points. Every configuration
