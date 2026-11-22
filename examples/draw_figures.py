@@ -48,7 +48,12 @@ def main() -> None:
     terse = vectors[3]
 
     coords = lb.embed_all(vectors, alpha=0)
-    drawn = lb.plot_map(coords, title="four configurations of one service")
+    # a wide, short axes: the points here sit in a horizontal band, and an
+    # equal-aspect map on a square figure would be mostly empty
+    import matplotlib.pyplot as plt
+
+    _, ax = plt.subplots(figsize=(7.0, 3.4))
+    drawn = lb.plot_map(coords, title="four configurations of one service", ax=ax)
     print(lb.save_figure(drawn.ax, str(out / "map.png")), "--", drawn.caption)
 
     names, dist = lb.pairwise(coords)

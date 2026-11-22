@@ -198,22 +198,22 @@ Every figure below is produced by `python examples/draw_figures.py`, which runs
 with no API key: the recorded trace of `service_regression.py`, four
 configurations of that service, scored by a 135M local model.
 
-![the four configurations on the MDS plane](https://raw.githubusercontent.com/Tdual/lm-behavior-maps/main/docs/img/map.png)
+<img src="https://raw.githubusercontent.com/Tdual/lm-behavior-maps/main/docs/img/map.png" width="760" alt="the four configurations on the MDS plane">
 
 `terse` — the specialist's prompt replaced wholesale — sits furthest out, and
 the two-word edit between `v1` and `v2` is the closest pair. The caption is the
 figure's own licence to be read: this plane keeps 98.6% of the configuration.
 
-![what moved, by role](https://raw.githubusercontent.com/Tdual/lm-behavior-maps/main/docs/img/roles.png)
+<img src="https://raw.githubusercontent.com/Tdual/lm-behavior-maps/main/docs/img/roles.png" width="680" alt="what moved, by role">
 
 Rewriting the specialist's prompt moved the specialist and left the router and
 the synthesiser at exactly zero, which is the expected answer here: their
 prompts and their inputs did not change. A nonzero bar on a component nobody
 edited is the finding worth chasing.
 
-![the steps that moved most](https://raw.githubusercontent.com/Tdual/lm-behavior-maps/main/docs/img/steps.png)
+<img src="https://raw.githubusercontent.com/Tdual/lm-behavior-maps/main/docs/img/steps.png" width="680" alt="the steps that moved most">
 
-![pairwise distance](https://raw.githubusercontent.com/Tdual/lm-behavior-maps/main/docs/img/distances.png)
+<img src="https://raw.githubusercontent.com/Tdual/lm-behavior-maps/main/docs/img/distances.png" width="540" alt="pairwise distance">
 
 ## Read `diagnose` first
 
