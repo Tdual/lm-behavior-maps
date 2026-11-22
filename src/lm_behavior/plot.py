@@ -42,6 +42,16 @@ MARK = "#1f4e79"  # one ink for the data; identity comes from the labels
 WARN = "#b3261e"
 
 
+def _fmt(value: float) -> str:
+    """Four significant digits.
+
+    A fixed number of decimals hides the magnitude of these quantities: a real
+    per-role contribution can sit at 2e-04 as easily as at 5.8, and `0.0002`
+    reads as a rounding artefact where `0.0001954` reads as a measurement.
+    """
+    return f"{value:.4g}"
+
+
 def _pyplot():
     try:
         import matplotlib.pyplot as plt
@@ -170,7 +180,7 @@ def plot_distances(
         for j in range(n):
             value = matrix[i, j]
             ax.text(
-                j, i, f"{value:.3f}", ha="center", va="center", fontsize=8,
+                j, i, _fmt(value), ha="center", va="center", fontsize=8,
                 # the dark end of the ramp needs light ink
                 color="#ffffff" if value > 0.6 * top else "#333333",
             )
@@ -208,7 +218,7 @@ def plot_by_role(
     total = sum(c.total for c in rows)
     widest = max(values) or 1.0
     for yi, c, v in zip(y, rows, values, strict=True):
-        text = f"{v:.4f}" if per_step else f"{v:.4f}   {c.share:.1%}"
+        text = _fmt(v) if per_step else f"{_fmt(v)}   {c.share:.1%}"
         ax.text(v + 0.02 * widest, yi, text, va="center", fontsize=9, color="#333333")
     ax.set_xlim(0, widest * 1.32)
     _recede(ax)
@@ -243,7 +253,7 @@ def plot_top_steps(
     ax.set_yticks(y, labels, fontsize=9)
     widest = max(values) or 1.0
     for yi, v in zip(y, values, strict=True):
-        ax.text(v + 0.02 * widest, yi, f"{v:.4f}", va="center", fontsize=9, color="#333333")
+        ax.text(v + 0.02 * widest, yi, _fmt(v), va="center", fontsize=9, color="#333333")
     ax.set_xlim(0, widest * 1.22)
     _recede(ax)
     ax.grid(axis="y", visible=False)

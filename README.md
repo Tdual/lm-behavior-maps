@@ -25,6 +25,27 @@ between the resulting coordinates tracks the KL divergence between the two
 policies. Record once with the LangGraph or CrewAI adapter, then compare as
 many configurations as you like for the cost of one forward pass per decision.
 
+```mermaid
+flowchart LR
+  SVC["your LangGraph / CrewAI service"] -- "one recorded run" --> REF["reference decision points<br/>history, admissible actions,<br/>action taken"]
+
+  REF --> A["config A<br/>model + harness"]
+  REF --> B["config B<br/>model + harness"]
+
+  A -- "teacher-forced<br/>log-likelihood per step" --> ZA["coordinates"]
+  B -- "one forward pass<br/>per decision" --> ZB["coordinates"]
+
+  ZA --> D["squared distance<br/>≈ symmetric trajectory KL"]
+  ZB --> D
+
+  D --> R1["by role: which component moved"]
+  D --> R2["top steps: which decisions moved"]
+  D --> R3["map: where every config sits"]
+```
+
+The service is run **once**, to record the decision points. Every configuration
+after that is scored against those same points, so nothing is rolled out again.
+
 **What it answers is "how much did this change the behaviour", not "is it
 better".** It is a regression detector, not a benchmark — a cheap filter to run
 before the expensive evaluation, or to catch the change nobody intended.
@@ -171,6 +192,27 @@ claim more than the measurement does.
 
 `plot_map` needs at least three agents. For two, the distance is the whole
 result and a map adds nothing.
+
+Every figure below is produced by `python examples/draw_figures.py`, which runs
+with no API key: the recorded trace of `service_regression.py`, four
+configurations of that service, scored by a 135M local model.
+
+![the four configurations on the MDS plane](https://raw.githubusercontent.com/Tdual/lm-behavior-maps/main/docs/img/map.png)
+
+`terse` — the specialist's prompt replaced wholesale — sits furthest out, and
+the two-word edit between `v1` and `v2` is the closest pair. The caption is the
+figure's own licence to be read: this plane keeps 98.6% of the configuration.
+
+![what moved, by role](https://raw.githubusercontent.com/Tdual/lm-behavior-maps/main/docs/img/roles.png)
+
+Rewriting the specialist's prompt moved the specialist and left the router and
+the synthesiser at exactly zero, which is the expected answer here: their
+prompts and their inputs did not change. A nonzero bar on a component nobody
+edited is the finding worth chasing.
+
+![the steps that moved most](https://raw.githubusercontent.com/Tdual/lm-behavior-maps/main/docs/img/steps.png)
+
+![pairwise distance](https://raw.githubusercontent.com/Tdual/lm-behavior-maps/main/docs/img/distances.png)
 
 ## Read `diagnose` first
 
