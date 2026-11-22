@@ -27,18 +27,15 @@ many configurations as you like for the cost of one forward pass per decision.
 
 ```mermaid
 flowchart TB
-  SVC["your LangGraph / CrewAI service"] -- "one recorded run" --> REF["reference decision points<br/>history, admissible actions, action taken"]
+  SVC["your LangGraph / CrewAI service"] -- "one recorded run" --> REF["reference decision points &mdash; history, admissible actions, action taken"]
 
   REF --> A["config A: model + harness"]
   REF --> B["config B: model + harness"]
 
-  A -- "teacher-forced log-likelihood,<br/>one forward pass per decision" --> ZA["coordinates"]
-  B -- "the same decision points,<br/>never run again" --> ZB["coordinates"]
+  A -- "teacher-forced log-likelihood,<br/>one forward pass per decision" --> D["squared distance &asymp; symmetric trajectory KL"]
+  B -- "the same decision points,<br/>the service is never run again" --> D
 
-  ZA --> D["squared distance ≈ symmetric trajectory KL"]
-  ZB --> D
-
-  D --> R["by role: which component moved<br/>top steps: which decisions moved<br/>map: where every configuration sits"]
+  D --> R["by role: which component moved &middot; top steps: which decisions moved &middot; map: where every configuration sits"]
 ```
 
 The service is run **once**, to record the decision points. Every configuration
