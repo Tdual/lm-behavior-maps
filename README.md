@@ -38,9 +38,7 @@ flowchart LR
   ZA --> D["squared distance<br/>≈ symmetric trajectory KL"]
   ZB --> D
 
-  D --> R1["by role: which component moved"]
-  D --> R2["top steps: which decisions moved"]
-  D --> R3["map: where every config sits"]
+  D --> R["by role: which component moved<br/>top steps: which decisions moved<br/>map: where every config sits"]
 ```
 
 The service is run **once**, to record the decision points. Every configuration
