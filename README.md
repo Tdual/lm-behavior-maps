@@ -32,11 +32,14 @@ flowchart LR
   REF --> B["config B"]
   A -- "teacher-forced<br/>log-likelihood" --> D["distance²<br/>&asymp; symmetric KL"]
   B -- "one forward pass<br/>per decision" --> D
-  D --> R["which component moved<br/>which decisions moved<br/>where every config sits"]
+  D --> R["what moved, and where"]
 ```
 
 The service is run **once**, to record the decision points. Every configuration
 after that is scored against those same points, so nothing is rolled out again.
+What comes out of the last box is three readings of the same number: `by_role`
+(which component moved), `top_steps` (which decisions moved) and the map (where
+every configuration sits relative to the others).
 
 **What it answers is "how much did this change the behaviour", not "is it
 better".** It is a regression detector, not a benchmark — a cheap filter to run
