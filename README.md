@@ -33,6 +33,12 @@ flowchart LR
   A -- "teacher-forced<br/>log-likelihood" --> D["distance²<br/>&asymp; symmetric KL"]
   B -- "one forward pass<br/>per decision" --> D
   D --> R["what moved, and where"]
+
+  %% GitHub keeps its pan and zoom controls over the right edge of a rendered
+  %% mermaid block; this empty column sits under them instead of a real box.
+  R ~~~ PAD[" "]
+  classDef pad fill:transparent,stroke:transparent,color:transparent
+  class PAD pad
 ```
 
 The service is run **once**, to record the decision points. Every configuration
